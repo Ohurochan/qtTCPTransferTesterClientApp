@@ -5,5 +5,5 @@ SOURCES       = client.cpp \
                 main.cpp
 
 # install
-target.path = $$[QT_INSTALL_EXAMPLES]/network/fortuneclient
+target.path = $$_PRO_FILE_PWD_/bin
 INSTALLS += target
