@@ -43,168 +43,34 @@
 
 #include "client.h"
 
+#include "ui_frmTcpClient.h"
+
+#include <QLayout>
+
 //! [0]
 Client::Client(QWidget *parent)
-:   QDialog(parent), networkSession(0)
+:   QWidget(parent), networkSession(0)
 {
-//! [0]
-    hostLabel = new QLabel(tr("&Server name:"));
-    portLabel = new QLabel(tr("S&erver port:"));
 
-    hostCombo = new QComboBox;
-    hostCombo->setEditable(true);
-    // find out name of this machine
-    QString name = QHostInfo::localHostName();
-    if (!name.isEmpty()) {
-        hostCombo->addItem(name);
-        QString domain = QHostInfo::localDomainName();
-        if (!domain.isEmpty())
-            hostCombo->addItem(name + QChar('.') + domain);
-    }
-    if (name != QString("localhost"))
-        hostCombo->addItem(QString("localhost"));
-    // find out IP addresses of this machine
-    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
-    // add non-localhost addresses
-    for (int i = 0; i < ipAddressesList.size(); ++i) {
-        if (!ipAddressesList.at(i).isLoopback())
-            hostCombo->addItem(ipAddressesList.at(i).toString());
-    }
-    // add localhost addresses
-    for (int i = 0; i < ipAddressesList.size(); ++i) {
-        if (ipAddressesList.at(i).isLoopback())
-            hostCombo->addItem(ipAddressesList.at(i).toString());
-    }
+    setupUI();
 
-    portLineEdit = new QLineEdit;
-    portLineEdit->setValidator(new QIntValidator(1, 65535, this));
+    setupNetwork();
 
-    hostLabel->setBuddy(hostCombo);
-    portLabel->setBuddy(portLineEdit);
+    setupConnection();
 
-    statusLabel = new QLabel(tr("This examples requires that you run the "
-                                "Fortune Server example as well."));
-
-    getFortuneButton = new QPushButton(tr("Get Fortune"));
-    getFortuneButton->setDefault(true);
-    getFortuneButton->setEnabled(false);
-
-    quitButton = new QPushButton(tr("Quit"));
-
-    buttonBox = new QDialogButtonBox;
-    buttonBox->addButton(getFortuneButton, QDialogButtonBox::ActionRole);
-    buttonBox->addButton(quitButton, QDialogButtonBox::RejectRole);
-
-//! [1]
-    tcpSocket = new QTcpSocket(this);
-//! [1]
-
-    connect(hostCombo, SIGNAL(editTextChanged(QString)),
-            this, SLOT(enableGetFortuneButton()));
-    connect(portLineEdit, SIGNAL(textChanged(QString)),
-            this, SLOT(enableGetFortuneButton()));
-    connect(getFortuneButton, SIGNAL(clicked()),
-            this, SLOT(requestNewFortune()));
-    connect(quitButton, SIGNAL(clicked()), this, SLOT(close()));
-//! [2] //! [3]
-    connect(tcpSocket, SIGNAL(readyRead()), this, SLOT(readFortune()));
-//! [2] //! [4]
-    connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
-//! [3]
-            this, SLOT(displayError(QAbstractSocket::SocketError)));
-//! [4]
-
-    QGridLayout *mainLayout = new QGridLayout;
-    mainLayout->addWidget(hostLabel, 0, 0);
-    mainLayout->addWidget(hostCombo, 0, 1);
-    mainLayout->addWidget(portLabel, 1, 0);
-    mainLayout->addWidget(portLineEdit, 1, 1);
-    mainLayout->addWidget(statusLabel, 2, 0, 1, 2);
-    mainLayout->addWidget(buttonBox, 3, 0, 1, 2);
-    setLayout(mainLayout);
-
-    setWindowTitle(tr("Fortune Client"));
-    portLineEdit->setFocus();
-
-    QNetworkConfigurationManager manager;
-    if (manager.capabilities() & QNetworkConfigurationManager::NetworkSessionRequired) {
-        // Get saved network configuration
-        QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
-        settings.beginGroup(QLatin1String("QtNetwork"));
-        const QString id = settings.value(QLatin1String("DefaultNetworkConfiguration")).toString();
-        settings.endGroup();
-
-        // If the saved network configuration is not currently discovered use the system default
-        QNetworkConfiguration config = manager.configurationFromIdentifier(id);
-        if ((config.state() & QNetworkConfiguration::Discovered) !=
-            QNetworkConfiguration::Discovered) {
-            config = manager.defaultConfiguration();
-        }
-
-        networkSession = new QNetworkSession(config, this);
-        connect(networkSession, SIGNAL(opened()), this, SLOT(sessionOpened()));
-
-        getFortuneButton->setEnabled(false);
-        statusLabel->setText(tr("Opening network session."));
-        networkSession->open();
-    }
-//! [5]
+    updateUI();
 }
-//! [5]
 
-//! [6]
 void Client::requestNewFortune()
 {
-    getFortuneButton->setEnabled(false);
+    btnSendRequest->setEnabled(false);
     blockSize = 0;
     tcpSocket->abort();
-//! [7]
     tcpSocket->connectToHost(hostCombo->currentText(),
                              portLineEdit->text().toInt());
-//! [7]
 }
-//! [6]
 
-#if 0 // default
-//! [8]
-void Client::readFortune()
-{
-//! [9]
-    QDataStream in(tcpSocket);
-    in.setVersion(QDataStream::Qt_4_0);
 
-    if (blockSize == 0) {
-        if (tcpSocket->bytesAvailable() < (int)sizeof(quint16))
-            return;
-//! [8]
-
-//! [10]
-        in >> blockSize;
-    }
-
-    if (tcpSocket->bytesAvailable() < blockSize)
-        return;
-//! [10] //! [11]
-
-    QString nextFortune;
-    in >> nextFortune;
-
-    if (nextFortune == currentFortune) {
-        QTimer::singleShot(0, this, SLOT(requestNewFortune()));
-        return;
-    }
-//! [11]
-
-//! [12]
-    currentFortune = nextFortune;
-//! [9]
-    statusLabel->setText(currentFortune);
-    getFortuneButton->setEnabled(true);
-}
-//! [12]
-#else // Edited by 2015.2.23
-
-//! [8]
 void Client::readFortune()
 {
 
@@ -221,40 +87,24 @@ void Client::readFortune()
         return;
 
     // Dataの読み出し
-
-    // Msg Size
-//    quint32 msgSize, imgSize;
-//    in >> msgSize >> imgSize;
-
     QByteArray imageData;
-//    imageData.resize(imgSize);
     QString msgString;
     in >> msgString >> imageData;
-
-//    in >> nextFortune;
-
-    // 重複防止
-//    if (msgString == currentFortune) {
-//        QTimer::singleShot(0, this, SLOT(requestNewFortune()));
-//        return;
-//    }
 
     // 現在時刻取得
     QDateTime curTime = QDateTime::currentDateTime();
     QString strCurTime = "RecvTime:" + curTime.toString("hhmmsszzz");
 
     // UI更新
-    currentFortune = msgString;
-    statusLabel->setText(QString("Recvd [%1]Bytes:%2, %3").
-                         arg(blockSize).
-                         arg(msgString)
-                         .arg(strCurTime)
-                         );
-    getFortuneButton->setEnabled(true);
-}
-#endif
+    currentFortune = QString("Recvd [%1]Bytes:%2, %3").
+            arg(blockSize).
+            arg(msgString)
+            .arg(strCurTime);
+    btnSendRequest->setEnabled(true);
 
-//! [13]
+    updateUI();
+}
+
 void Client::displayError(QAbstractSocket::SocketError socketError)
 {
     switch (socketError) {
@@ -278,13 +128,12 @@ void Client::displayError(QAbstractSocket::SocketError socketError)
                                  .arg(tcpSocket->errorString()));
     }
 
-    getFortuneButton->setEnabled(true);
+    btnSendRequest->setEnabled(true);
 }
-//! [13]
 
 void Client::enableGetFortuneButton()
 {
-    getFortuneButton->setEnabled((!networkSession || networkSession->isOpen()) &&
+    btnSendRequest->setEnabled((!networkSession || networkSession->isOpen()) &&
                                  !hostCombo->currentText().isEmpty() &&
                                  !portLineEdit->text().isEmpty());
 
@@ -305,9 +154,142 @@ void Client::sessionOpened()
     settings.setValue(QLatin1String("DefaultNetworkConfiguration"), id);
     settings.endGroup();
 
-    statusLabel->setText(tr("This examples requires that you run the "
-                            "Fortune Server example as well."));
+    currentFortune = tr("This examples requires that you run the "
+                            "Fortune Server example as well.");
 
     enableGetFortuneButton();
+
+    updateUI();
+}
+
+/**
+ * @brief Client::setupUI
+ */
+void Client::setupUI()
+{
+    // Ui Settings from Form
+    ui = new Ui::frmTcpClient;
+    ui->setupUi(this);
+    hostLabel = ui->lblIPAddress;
+    portLabel = ui->lblPort;
+    hostCombo = ui->cmbIPAddresses;
+    portLineEdit = ui->ledtPort;
+    btnSendRequest = ui->btnRequest;
+    quitButton = ui->btnQuit;
+    statusLabel = ui->lblMessages;
+
+    /// ServerNames
+    hostCombo->setEditable(true);
+    // find out name of this machine
+    QString name = QHostInfo::localHostName();
+    if (!name.isEmpty()) {
+        hostCombo->addItem(name);
+        QString domain = QHostInfo::localDomainName();
+        if (!domain.isEmpty())
+            hostCombo->addItem(name + QChar('.') + domain);
+    }
+    if (name != QString("localhost"))
+        hostCombo->addItem(QString("localhost"));
+
+    // find out IP addresses of this machine
+    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+    // add non-localhost addresses
+    for (int i = 0; i < ipAddressesList.size(); ++i) {
+        if (!ipAddressesList.at(i).isLoopback())
+            hostCombo->addItem(ipAddressesList.at(i).toString());
+    }
+    // add localhost addresses
+    for (int i = 0; i < ipAddressesList.size(); ++i) {
+        if (ipAddressesList.at(i).isLoopback())
+            hostCombo->addItem(ipAddressesList.at(i).toString());
+    }
+
+    /// Server Port
+    portLineEdit->setValidator(new QIntValidator(1, 65535, this));
+
+    /// Labels
+    hostLabel->setBuddy(hostCombo);
+    portLabel->setBuddy(portLineEdit);
+
+    currentFortune = tr("This tcp client requires that you run the "
+                                "Tcp Server App as well.");
+    statusLabel->setText(currentFortune);
+
+    /// Buttons
+    btnSendRequest->setDefault(true);
+    btnSendRequest->setEnabled(false);
+
+//    buttonBox = new QDialogButtonBox;
+//    buttonBox->addButton(getFortuneButton, QDialogButtonBox::ActionRole);
+//    buttonBox->addButton(quitButton, QDialogButtonBox::RejectRole);
+
+
+    setWindowTitle(qAppName());
+    portLineEdit->setFocus();
+}
+
+/**
+ * @brief Client::setupNetwork
+ */
+void Client::setupNetwork()
+{
+
+    tcpSocket = new QTcpSocket(this);
+    QNetworkConfigurationManager manager;
+    if (manager.capabilities() & QNetworkConfigurationManager::NetworkSessionRequired) {
+        // Get saved network configuration
+        QSettings settings(QSettings::UserScope, QLatin1String("QtProject"));
+        settings.beginGroup(QLatin1String("QtNetwork"));
+        const QString id = settings.value(QLatin1String("DefaultNetworkConfiguration")).toString();
+        settings.endGroup();
+
+        // If the saved network configuration is not currently discovered use the system default
+        QNetworkConfiguration config = manager.configurationFromIdentifier(id);
+        if ((config.state() & QNetworkConfiguration::Discovered) !=
+            QNetworkConfiguration::Discovered) {
+            config = manager.defaultConfiguration();
+        }
+
+        networkSession = new QNetworkSession(config, this);
+        connect(networkSession, SIGNAL(opened()), this, SLOT(sessionOpened()));
+
+        btnSendRequest->setEnabled(false);
+        statusLabel->setText(tr("Opening network session."));
+        networkSession->open();
+    }
+}
+
+/**
+ * @brief Client::setupConnection
+ */
+void Client::setupConnection()
+{
+    connect(hostCombo, SIGNAL(editTextChanged(QString)),
+            this, SLOT(enableGetFortuneButton()));
+    connect(portLineEdit, SIGNAL(textChanged(QString)),
+            this, SLOT(enableGetFortuneButton()));
+    connect(btnSendRequest, SIGNAL(clicked()),
+            this, SLOT(requestNewFortune()));
+    connect(quitButton, SIGNAL(clicked()), this, SLOT(close()));
+    connect(tcpSocket, SIGNAL(readyRead()), this, SLOT(readFortune()));
+    connect(tcpSocket, SIGNAL(error(QAbstractSocket::SocketError)),
+            this, SLOT(displayError(QAbstractSocket::SocketError)));
+}
+
+void Client::changeEvent(QEvent *ev)
+{
+    QWidget::changeEvent(ev);
+    if(ev->type() == QEvent::Resize)
+        updateUI();
+}
+
+
+
+void Client::updateUI()
+{
+    statusLabel->setText(currentFortune);
+    hostLabel->fixFontSize();
+    portLabel->fixFontSize();
+    statusLabel->fixFontSize();
 }
 

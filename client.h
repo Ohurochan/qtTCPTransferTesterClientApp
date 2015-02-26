@@ -41,9 +41,12 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QTcpSocket>
 
+namespace Ui {
+class frmTcpClient;
+}
 QT_BEGIN_NAMESPACE
 class QComboBox;
 class QDialogButtonBox;
@@ -52,10 +55,11 @@ class QLineEdit;
 class QPushButton;
 class QTcpSocket;
 class QNetworkSession;
+class myLabel;
 QT_END_NAMESPACE
 
 //! [0]
-class Client : public QDialog
+class Client : public QWidget
 {
     Q_OBJECT
 
@@ -68,14 +72,16 @@ private slots:
     void displayError(QAbstractSocket::SocketError socketError);
     void enableGetFortuneButton();
     void sessionOpened();
+    void updateUI();
 
 private:
-    QLabel *hostLabel;
-    QLabel *portLabel;
+    Ui::frmTcpClient* ui;
+    myLabel *hostLabel;
+    myLabel *portLabel;
     QComboBox *hostCombo;
     QLineEdit *portLineEdit;
-    QLabel *statusLabel;
-    QPushButton *getFortuneButton;
+    myLabel *statusLabel;
+    QPushButton *btnSendRequest;
     QPushButton *quitButton;
     QDialogButtonBox *buttonBox;
 
@@ -84,6 +90,15 @@ private:
     quint32 blockSize;
 
     QNetworkSession *networkSession;
+
+    void setupUI();
+    void setupNetwork();
+    void setupConnection();
+
+
+    // QWidget interface
+protected:
+    virtual void changeEvent(QEvent *);
 };
 //! [0]
 
